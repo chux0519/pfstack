@@ -6,4 +6,5 @@ set -euo pipefail
 NAME=${1:?name}; WT=${2:?worktree}; MODEL=${3:-}
 : "${HC_TERMINAL_ID:?run from an hc terminal}"
 ARGS="--permission-mode auto"; [ -n "$MODEL" ] && ARGS="--model $MODEL $ARGS"
-hc run --bg --parent "$HC_TERMINAL_ID" --name "$NAME" --cwd "$WT" /bin/zsh -lic "set -e; exec claude $ARGS"
+PRE=${WORKER_PRE:-}   # machine setup before claude, e.g. WORKER_PRE="proxy_on; nvm use --lts;"
+hc run --bg --parent "$HC_TERMINAL_ID" --name "$NAME" --cwd "$WT" /bin/zsh -lic "set -e; $PRE exec claude $ARGS"
