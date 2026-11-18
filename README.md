@@ -1,10 +1,17 @@
 # pfstack（potafree stack）
 
-## 一句话安装（发给你的 agent）
+**English:** pfstack is how we build software with coding agents: one coordinator plans, reviews and merges;
+workers implement in their own worktrees; every step leaves evidence, can be resumed and rolled back; every
+pitfall becomes a lint rule or a model-based test. It ships as a Claude Code / Codex skill (`/pfstack`) plus
+templates. The docs below are in Chinese; the templates are in English.
 
-> 帮我安装 pfstack skill：运行 `gh repo clone chux0519/pfstack ~/repos/pfstack && bash ~/repos/pfstack/install.sh`（已经装过就运行 `bash ~/repos/pfstack/install.sh` 更新），装好后告诉我结果。
+## 一句话安装（发给你的 agent） / One-line install (tell your agent)
 
-`install.sh` 会克隆或更新仓库，把 `skill/pfstack` 链接到 `~/.claude/skills/`（如果有 `~/.codex/` 也链接到 `~/.codex/skills/`），可重复运行。仓库是私有的，需要 `gh` 已登录且有访问权限。
+> 帮我安装 pfstack skill：运行 `git clone https://github.com/chux0519/pfstack ~/repos/pfstack && bash ~/repos/pfstack/install.sh`（已经装过就运行 `bash ~/repos/pfstack/install.sh` 更新），装好后告诉我结果。
+
+> Install the pfstack skill: run `git clone https://github.com/chux0519/pfstack ~/repos/pfstack && bash ~/repos/pfstack/install.sh` (if it is already there, run `bash ~/repos/pfstack/install.sh` to update), then tell me the result.
+
+`install.sh` 会克隆或更新仓库，把 `skill/pfstack` 链接到 `~/.claude/skills/`（如果有 `~/.codex/` 也链接到 `~/.codex/skills/`），可重复运行。
 
 装好后在任何项目里说 **`/pfstack`**（或「用 pfstack 初始化这个项目」）即可。
 
@@ -133,12 +140,7 @@ skill/pfstack/                    Claude Code skill（init / check / update）+ 
 
 ## 用法
 
-**推荐：Claude Code skill。** 装一次，所有项目可用：
-
-```sh
-gh repo clone chux0519/pfstack ~/repos/pfstack
-ln -sfn ~/repos/pfstack/skill/pfstack ~/.claude/skills/pfstack
-```
+**推荐：Claude Code skill。** 装一次（见上方一句话安装），所有项目可用。
 
 然后在新项目里对 Claude 说 `/pfstack`（或「用 pfstack 初始化这个项目」）。它会：列出要加的文件 → 一次问清项目名、设备、
 授权、禁用名字、测试命令 → 复制模板并填好占位 → 建 `CLAUDE.md`（`@AGENTS.md`）→ 跑 lint、记测试基线 → 在 `pfstack-init`
@@ -151,3 +153,7 @@ python3 ~/repos/pfstack/skill/pfstack/scripts/pfstack.py init <dir> [--dry-run]
 python3 ~/repos/pfstack/skill/pfstack/scripts/pfstack.py check <dir>
 python3 ~/repos/pfstack/skill/pfstack/scripts/pfstack.py update <dir>
 ```
+
+## License
+
+MIT © 2026 Potafree LLC

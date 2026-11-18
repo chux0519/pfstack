@@ -11,7 +11,7 @@ if [ -d "$HERE/skill/pfstack" ]; then
 else
   HOME_DIR=${PFSTACK_HOME:-$HOME/repos/pfstack}
   if [ -d "$HOME_DIR/.git" ]; then git -C "$HOME_DIR" pull -q --ff-only
-  else gh repo clone chux0519/pfstack "$HOME_DIR" -- -q; fi
+  else git clone -q https://github.com/chux0519/pfstack "$HOME_DIR"; fi
 fi
 [ -d "$HERE/.git" ] && [ "$HOME_DIR" = "$HERE" ] && git -C "$HOME_DIR" pull -q --ff-only || true
 for dir in "$HOME/.claude/skills" "$HOME/.codex/skills"; do
