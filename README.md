@@ -1,5 +1,13 @@
 # pfstack（potafree stack）
 
+## 一句话安装（发给你的 agent）
+
+> 帮我安装 pfstack skill：运行 `gh repo clone chux0519/pfstack ~/repos/pfstack && bash ~/repos/pfstack/install.sh`（已经装过就运行 `bash ~/repos/pfstack/install.sh` 更新），装好后告诉我结果。
+
+`install.sh` 会克隆或更新仓库，把 `skill/pfstack` 链接到 `~/.claude/skills/`（如果有 `~/.codex/` 也链接到 `~/.codex/skills/`），可重复运行。仓库是私有的，需要 `gh` 已登录且有访问权限。
+
+装好后在任何项目里说 **`/pfstack`**（或「用 pfstack 初始化这个项目」）即可。
+
 > potafree 的 agent 协作开发方法，2026-11-18 从 Shinphony（iOS/macOS/Windows 终端 App + Go 守护进程 + Cloudflare Worker）一路踩坑总结而来。
 > 目标：换一个项目也能直接套用。例子里的工具名只是参考，见 `templates/`。
 > 部分做法借鉴自 poteto 的 pstack（小步可验证、暂停可恢复、先解释数字），其余是我们自己的经验。
