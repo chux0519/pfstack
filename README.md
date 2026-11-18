@@ -1,152 +1,188 @@
-# pfstack（potafree stack）
+# pfstack (potafree stack)
 
-**English:** pfstack is how we build software with coding agents: one coordinator plans, reviews and merges;
-workers implement in their own worktrees; every step leaves evidence, can be resumed and rolled back; every
-pitfall becomes a lint rule or a model-based test. It ships as a Claude Code / Codex skill (`/pfstack`) plus
-templates. The docs below are in Chinese; the templates are in English.
+**English** | [中文](README.zh-CN.md)
 
-## 一句话安装（发给你的 agent） / One-line install (tell your agent)
+How we build software with coding agents: **one coordinator sets the direction, agents do the work; every
+step leaves evidence, can be resumed and can be rolled back; every pitfall becomes a rule or a test.**
 
-> 帮我安装 pfstack skill：运行 `git clone https://github.com/chux0519/pfstack ~/repos/pfstack && bash ~/repos/pfstack/install.sh`（已经装过就运行 `bash ~/repos/pfstack/install.sh` 更新），装好后告诉我结果。
+pfstack ships as a Claude Code / Codex skill (`/pfstack`) plus project templates and small tools. It was
+distilled on 2026-11-18 from building Shinphony (an iOS / macOS / Windows terminal app, a Go daemon and
+Cloudflare Workers). Some ideas come from poteto's pstack (small verifiable units, safe pause and resume,
+explain the number); the rest is our own experience.
+
+## One-line install (tell your agent)
 
 > Install the pfstack skill: run `git clone https://github.com/chux0519/pfstack ~/repos/pfstack && bash ~/repos/pfstack/install.sh` (if it is already there, run `bash ~/repos/pfstack/install.sh` to update), then tell me the result.
 
-`install.sh` 会克隆或更新仓库，把 `skill/pfstack` 链接到 `~/.claude/skills/`（如果有 `~/.codex/` 也链接到 `~/.codex/skills/`），可重复运行。
+`install.sh` clones or updates the repo and links `skill/pfstack` into `~/.claude/skills/` (and
+`~/.codex/skills/` if `~/.codex/` exists). It is safe to run again.
 
-装好后在任何项目里说 **`/pfstack`**（或「用 pfstack 初始化这个项目」）即可。
-
-> potafree 的 agent 协作开发方法，2026-11-18 从 Shinphony（iOS/macOS/Windows 终端 App + Go 守护进程 + Cloudflare Worker）一路踩坑总结而来。
-> 目标：换一个项目也能直接套用。例子里的工具名只是参考，见 `templates/`。
-> 部分做法借鉴自 poteto 的 pstack（小步可验证、暂停可恢复、先解释数字），其余是我们自己的经验。
-
-一句话：**一个人定方向，agent 做实事；每一步都有证据、能恢复、可回滚；踩过的坑变成规则和测试。**
+Then, in any project, say **`/pfstack`** (or "set up pfstack in this project").
 
 ---
 
-## 1. 角色：一个协调者，多个实施者
+## 1. Roles: one coordinator, several implementers
 
-| 角色 | 做什么 | 不做什么 |
+| Role | Does | Does not |
 |---|---|---|
-| 协调者（主会话） | 和用户谈需求，写计划和验收标准，审 diff 和每张截图，合并，发布，独占共享资源（模拟器、真机、生产部署） | 实施者写代码时不同时改同一处 |
-| 实施者（worker，终端里的独立 agent） | 一个任务、一个分支、一个 worktree，按计划写代码，自跑最低档验证，写实施说明 | 不嵌套启动 agent，不碰共享资源，不自行扩需求，不合并、不发布 |
+| Coordinator (the main session) | Talks with the user, writes plans and acceptance criteria, reviews every diff and screenshot, merges, releases; owns shared resources (simulators, devices, production deploys) | Edit the same code an implementer is writing |
+| Implementer (a worker: a separate agent in its own terminal) | One task, one branch, one worktree; codes to the plan, runs the lowest evidence tier itself, writes implementation notes | Launch nested agents, touch shared resources, widen the scope, merge or release |
 
-- **按难度选模型：** 机械活（改名、文案、渲染、测试更新、验证运行）用便宜快的模型；跨模块设计、并发、协议、安全、原生平台用最强的模型。计划里写明选择。
-- **机器负载有上限：** 同时最多 2 个 worker、1 个模拟器；重命令 `nice -n 10`；缓存和临时文件放大盘。
-- **worker 的父地址用当前会话的真实地址**（`--parent "$HC_TERMINAL_ID"`），不要抄旧地址。
+- **Model by difficulty:** mechanical work (renames, copy, renders, test updates, verification runs) → a fast,
+  cheap model; cross-cutting design, concurrency, protocols, security, native platform work → the strongest
+  model. The plan states the choice.
+- **Machine load is capped:** at most 2 workers and 1 simulator at a time; heavy commands under `nice -n 10`;
+  caches and temp files on the big disk.
+- **Workers are parented to the live session address**, never a copied old one.
 
-## 2. 不丢工作：小步、提交、推送、留状态
+## 2. Never lose work: small units, commit, push, leave state
 
-- **每个改动都走分支 + PR**，协调者审完合并；合并或自己提交后立即推送主线。
-- **实施者每完成一个可验证的小单元：检查 → 提交 → 推送。** 超过几分钟的工作不允许只存在本机。
-- **每次汇报和暂停都写 `STATE.md`**：已完成、进行中、下一步、待决问题、怎么验证。新会话（或机器重启后）读它就能接着做，不用重新推导。
-- 远端用 SSH（HTTPS 钥匙串重启后可能被锁）。
+- **Every change goes through a branch and a PR**; the coordinator reviews and merges, then pushes main at once.
+- **Implementers finish each small verifiable unit with check → commit → push.** Nothing that took more than a
+  few minutes lives only on one machine.
+- **Every report and every pause writes `STATE.md`**: done, in progress, next step, open decisions, how to
+  verify. A new session (or the machine after a reboot) resumes from it without re-deriving anything.
+- Use SSH remotes (an HTTPS keychain can be locked after a reboot).
 
-## 3. 计划先行，轮次有上限
+## 3. Plan first, bounded rounds
 
-- 用户反馈 → 协调者写 plan + 验收标准 → **用户确认后才开工**。范围变化要重新确认。
-- **最多 3 轮**「实施 → 验收 → 审查」。第 3 轮后还有 P0–P2 就停下交给用户裁决，不开第 4 轮，也不改名重置计数。
-- 计划、实施说明、验收、审查都存进 `docs/iterations/<id>/round-NN/`，记录被测的确切源码版本。**agent 说「完成了」不算证据。**
+- User feedback → the coordinator writes the plan and acceptance criteria → **work starts only after the user
+  confirms**. A scope change needs a new confirmation.
+- **At most 3 rounds** of implement → accept → review. If P0–P2 issues remain after round 3, stop and let the
+  user decide; no round 4, and no renaming the task to reset the count.
+- Plans, implementation notes, acceptance and reviews go into `docs/iterations/<id>/round-NN/`, with the exact
+  source state that was tested. **An agent saying "done" is not evidence.**
 
-## 4. 证据分档：用能证明它的最低档
+## 4. Evidence tiers: the lowest tier that proves it
 
-| 档 | 什么时候 | 怎么做 |
+| Tier | When | How |
 |---|---|---|
-| A（默认） | 颜色、间距、文案、布局、组件替换 | 本机渲染真实界面截图 + 静态检查 + lint + 测试差分，几秒到几分钟 |
-| B | A 证明不了：键盘、时序、动画、WebView、手势、原生能力 | 一台设备、一个主题、相关场景，由协调者跑 |
-| C | 提审 / 对外发版前一次 | 全设备 × 全主题矩阵 |
+| A (default) | Colour, spacing, copy, layout, component swaps | Host-rendered screenshots of the real UI + static analysis + lint + test diff; seconds to minutes |
+| B | What A cannot prove: keyboard, timing, animation, WebView, gestures, native features | One device, one theme, the relevant scenes; run by the coordinator |
+| C | Once before a store submission or external release | Every device × every theme |
 
-- 计划里写明本轮用哪档；用 B 必须说明 A 为什么不够。证明不了的项列为「待 C」，不得声称已验收。
-- **时序问题录一次视频再抽帧**，不能凭操作后的一张截图判失败；场景脚本打 `PHASE` 标记，录完再按标记切帧，不重跑。
-- **只用专用设备**（写死 UDID，永不用 `booted`），不碰别的项目的设备；开发版永不装在用户的正式/TF 版本上（用独立 bundle id）。
+- The plan names the tier for the round; using B needs a reason why A is not enough. What a tier cannot prove is
+  listed as "pending C" and never claimed as accepted.
+- **Timing issues: record once, then cut frames.** One screenshot after an action is not proof of a failure.
+  Scenario scripts print `PHASE` marks; cut frames by mark instead of re-running.
+- **Dedicated devices only** (fixed IDs, never "the booted one"); never touch another project's devices; dev
+  builds never install over the user's production or beta app (use a separate bundle id).
 
-## 5. 设计有唯一真相
+## 5. One source of truth for design
 
-- `DESIGN.md` 是视觉和交互的唯一标准，只由协调者改。新 UI 用自己的组件层。
-- **每张截图都审**（Impeccable / HIG 启发式），逐张记录结论：明显缺陷当轮修；和 DESIGN 冲突的建议不改，列成「设计冲突」表交用户裁决，裁决后写回 DESIGN。
-- 用户的口头决定（例如「示意图可以，但不要装饰」）当场写进 DESIGN，附日期。
+- `DESIGN.md` is the only standard for visuals and interaction; only the coordinator edits it. New UI uses the
+  project's own component layer.
+- **Every screenshot gets reviewed** (HIG-style heuristics), with a verdict per image: obvious defects are fixed
+  in the same round; advice that conflicts with DESIGN.md is not applied but listed in a "design conflicts"
+  table for the user, whose decision is written back into DESIGN.md.
+- Spoken user decisions ("diagrams are fine, decoration is not") go into DESIGN.md on the spot, dated.
 
-## 6. 踩过的坑变成规则
+## 6. Pitfalls become rules
 
-- 每个新坑 → `docs/review_rules.md` 加一条规则；能自动检查的 → 加进 `tool/review_lint.py`（每条可单独跑）。
-- 每次审查都跑 lint + 人工规则清单。
-- 例子：原生插件必须注册（R30）；测试数据里不许出现真实主机名和用户名（M84，公开导出前再扫一遍）；构建号替换不许盲目 `sed`（曾经改坏一个 id，于是写了专用脚本）。
+- Each new pitfall → a rule in `docs/review_rules.md`; if it can be checked automatically → a rule in
+  `tool/review_lint.py` (each rule runs on its own).
+- Every review runs the lint plus the manual checklist.
+- Examples from Shinphony: native plugins must be registered; no real host or user names in test data (also
+  scanned before any public export); never bump build numbers with a blind `sed` (it once rewrote an id, so
+  now a dedicated script does it).
 
-## 7. 状态不变式 + 模型测试（时序 bug 的解法）
+## 7. State invariants + model-based tests (the fix for timing bugs)
 
-- 时序类问题（推送 vs 快照 vs 点击 vs 时钟、通知、试用节奏…）**先写规则再写测试**：每条规则一个编号（A1、LA3、ON7…）。
-- 测试 = 一个小的参考模型 + 带种子的随机事件序列 + 每个事件后检查全部规则。种子在 CI 固定；失败的序列自动缩短，保存成命名回归用例。
-- 三层：纯逻辑模型测试 → 真实界面驱动测试（假时钟、假支付、假网络）→ 模拟器场景脚本（命名场景 + PHASE 标记，用来录屏）。
-- 现场发现的回归：新规则编号 → 生成器里加用例 → 审查规则里加一行。
+- Timing problems (push vs snapshot vs tap vs clock, notifications, trial cadence, …) get **numbered rules
+  first, tests second** (A1, LA3, ON7, …).
+- A test = a small reference model + seeded random event sequences + every rule checked after every event.
+  Seeds are fixed in CI; a failing sequence is shrunk automatically and kept as a named regression case.
+- Three layers: pure model test → the real UI driven with fakes (clock, payments, network) → a device
+  scenario script (named scenarios + `PHASE` marks, for recording).
+- A regression found in the field: new rule id → a case in the generator → a line in the review rules.
 
-## 8. 先解释数字，再相信数字
+## 8. Explain the number before trusting it
 
-- 测试只看**相对基线的新失败**（测试差分脚本），不被历史失败淹没。
-- 计时类基准在全量里失败，**先单独重跑**；单独也失败或 profile 说明了变慢原因才算回归，并写进验收。
-- 外部服务报错先判断是不是对方故障（例如 App Store Connect 500/404），不要据此去「修」自己的东西。
+- Tests report **only new failures against a baseline** (the test-diff script), so old failures don't drown
+  new ones.
+- A wall-clock benchmark that fails in the full run is **rerun alone first**; it counts only if it also fails
+  alone or a profile shows what got slower, and the explanation goes into the acceptance.
+- When an external service errors, first check whether the service is down (e.g. App Store Connect 500/404)
+  before "fixing" your own code.
 
-## 9. 授权分层
+## 9. Layered authorization
 
-- **常驻授权**（用户一次说清，记进 memory）：审过的安全更新发布、测试版上传、某个服务的部署。
-- **每次询问：** 提审 / 上架、其他线上服务部署、任何对外可见或难撤销的动作。
-- 一次授权不外推到别的场景。自动模式拒绝了就问用户，不绕。
+- **Standing authorizations** (the user says it once; it is recorded in memory): reviewed security releases,
+  beta uploads, deploys of a given service.
+- **Ask every time:** store submissions and releases, other production deploys, anything public or hard to undo.
+- An authorization never extends to a different context. If the agent's safety mode refuses something, ask the
+  user; don't work around it.
 
-## 10. 安全卫生（硬规则）
+## 10. Hygiene (hard rules)
 
-- 不打印 token、密码、审核账号；凭据只在脚本内部读取。
-- 仓库里的副本隐去主机名和用户名；测试数据只用 `example-*` 主机。
-- 删除目录一律 `rm -rf "${D:?}"`；删除或覆盖前先看目标。
-- 不改全局工具链和共享 SDK；需要打补丁的让用户执行。
-- 临时预览服务（局域网 http）只暴露一个复制出来的目录，看完就关；生成的 HTML 一律带 `<meta charset="utf-8">`。
+- Never print tokens, passwords or review credentials; read them inside scripts only.
+- Redact host and user names in repo copies; fixtures use `example-*` hosts only.
+- Delete directories only as `rm -rf "${D:?}"`; look at the target before deleting or overwriting.
+- Don't change global toolchains or shared SDKs; ask the user to apply patches.
+- Temporary LAN previews serve a copied folder only and are stopped after use; generated HTML always has
+  `<meta charset="utf-8">`.
 
-## 11. 发布流水线脚本化
+## 11. Scripted release pipeline
 
-- 每个对外步骤都是脚本，默认只读预检，显式参数才写：`准备（dry-run）→ --submit → --submit --final`。
-- 构建号递增用专用脚本（只替换独立出现的数字，不碰 hex id），并处理网络重试。
-- 官网和 App 版本用门控变量切换（「App Store 显示新版后才露出新文案」），可以先合并、后上线。
-- 发布后核对：线上地址、校验和、可复现构建、公开导出的脱敏扫描。
+- Every outward step is a script that is read-only by default and writes only with explicit flags:
+  `prepare (dry run) → --submit → --submit --final`.
+- Build-number bumps use a dedicated script (only standalone numbers, never inside hex ids) and retry
+  network steps.
+- Website and app versions switch on gate variables ("show the new copy once the store shows the new
+  version"), so changes can merge early and go live later.
+- After a release, verify: live URLs, checksums, reproducible builds, the redaction scan of public exports.
 
-## 12. 和用户沟通
+## 12. Talking to the user
 
-- 回复短，**行动项在前**，中文 TLDR。
-- 后台任务没结果前不预测结果；需要用户做的事明确列出，并写清要测什么。
-- 需要用户在终端执行的命令，让用户用 `! <命令>` 在会话里跑。
+- Short replies, **action items first**, a TLDR in the user's language.
+- Never predict the result of a background job before it finishes; list exactly what the user needs to do
+  and test.
+- When the user must run a command themselves, give it as a one-liner they can paste into the session.
 
 ---
 
-### 新项目起步清单（模板在 `templates/`）
+### Starting a new project (templates in `templates/`)
 
-1. 建 `AGENTS.md`（入口）、`DESIGN.md`（唯一设计标准）、`docs/review_rules.md` + `tool/review_lint.py`、`docs/design/state_invariants.md`。
-2. 建测试差分基线脚本和本机渲染脚本（A 档）。
-3. 写死专用设备 / 环境的标识；开发版独立 bundle id。
-4. 定下常驻授权和必须询问的动作，记进 memory。
-5. 第一个迭代就按 plan → 确认 → worker → A 档 → 审查 → PR 合并 → STATE.md 跑一遍。
+1. Add `AGENTS.md` (the entry point), `DESIGN.md` (the design standard), `docs/review_rules.md` +
+   `tool/review_lint.py`, `docs/design/state_invariants.md`.
+2. Add the test-diff baseline script and a host render script (tier A).
+3. Fix the IDs of dedicated devices / environments; give dev builds their own bundle id.
+4. Decide the standing authorizations and the actions that always need asking; record them.
+5. Run the first iteration end to end: plan → confirm → worker → tier A → review → PR merge → STATE.md.
 
-## 仓库结构
+`/pfstack` does steps 1, 3 and 4 for you and records the test baseline.
+
+## Repository layout
 
 ```
-README.md                         本文
-templates/AGENTS.md               项目入口：角色、流程、硬规则（复制后改项目名和路径）
-templates/DESIGN.md               设计唯一真相的骨架
-templates/docs/review_rules.md    审查规则（人工 + 自动）
-templates/docs/design/state_invariants.md   状态不变式模板（规则编号 + 事件表）
-templates/docs/iterations/_example/         plan / implementation / acceptance / STATE 模板
-templates/tool/review_lint.py     规则注册式 lint 骨架（每条规则可单独跑）
-templates/tool/test_diff.sh       测试差分：只报相对基线的新失败
-templates/tool/next_build.py      构建号递增（只换独立出现的数字，不碰 hex id）
-templates/tool/model_check.py     模型测试小框架：种子、事件生成、每步检查、失败缩短
-templates/tool/spawn_worker.sh    在 hc 里启动一个实施者 worker
-skill/pfstack/                    Claude Code skill（init / check / update）+ CLI 脚本
+README.md                         this file (English)
+README.zh-CN.md                   Chinese version
+install.sh                        clone/update + link the skill
+templates/AGENTS.md               project entry point: roles, workflow, hard rules
+templates/DESIGN.md               skeleton of the design source of truth
+templates/docs/review_rules.md    review rules (manual + automatic)
+templates/docs/design/state_invariants.md   invariant template (rule ids + event alphabet)
+templates/docs/iterations/_example/         plan / implementation / acceptance / STATE templates
+templates/tool/review_lint.py     rule-registry lint (each rule runs alone)
+templates/tool/test_diff.sh       report only new failures against a baseline
+templates/tool/next_build.py      build-number bump that never touches hex ids
+templates/tool/model_check.py     tiny model-based testing harness: seeds, generator, per-step checks, shrinking
+templates/tool/spawn_worker.sh    start an implementer worker in hc
+skill/pfstack/                    the Claude Code / Codex skill (init / check / update) + CLI script
 ```
 
-## 用法
+## Usage
 
-**推荐：Claude Code skill。** 装一次（见上方一句话安装），所有项目可用。
+**Recommended: the skill.** Install once (see above); it works in every project.
 
-然后在新项目里对 Claude 说 `/pfstack`（或「用 pfstack 初始化这个项目」）。它会：列出要加的文件 → 一次问清项目名、设备、
-授权、禁用名字、测试命令 → 复制模板并填好占位 → 建 `CLAUDE.md`（`@AGENTS.md`）→ 跑 lint、记测试基线 → 在 `pfstack-init`
-分支提交，问你要不要推送。已有项目说 `/pfstack check` 看缺什么，`/pfstack update` 拉新模板（不覆盖你的改动）。
+In a new project say `/pfstack` (or "set up pfstack in this project"). It lists the files it will add → asks,
+in one message, for the project name, devices, authorizations, names that must never appear, and the test
+command → copies the templates and fills the placeholders → creates `CLAUDE.md` (`@AGENTS.md`) → runs the
+lint and records the test baseline → commits on a `pfstack-init` branch and asks before pushing. In an
+existing project, `/pfstack check` lists what is missing and `/pfstack update` brings in newer templates
+without overwriting your edits.
 
-**也可以直接用 CLI：**
+**Or use the CLI directly:**
 
 ```sh
 python3 ~/repos/pfstack/skill/pfstack/scripts/pfstack.py init <dir> [--dry-run]

@@ -5,7 +5,7 @@ description: Set up or check potafree stack (pfstack) agent-development practice
 
 # pfstack
 
-The practices are in `../../README.md` relative to this file (the pfstack repo). Templates are in
+The practices are in `../../README.md` relative to this file (the pfstack repo; `README.zh-CN.md` is the Chinese version). Templates are in
 `../../templates/`. Read the README once before acting, then follow the subcommand below.
 Talk to the user in their language; short, action items first.
 
