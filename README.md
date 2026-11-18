@@ -120,11 +120,26 @@ templates/tool/test_diff.sh       测试差分：只报相对基线的新失败
 templates/tool/next_build.py      构建号递增（只换独立出现的数字，不碰 hex id）
 templates/tool/model_check.py     模型测试小框架：种子、事件生成、每步检查、失败缩短
 templates/tool/spawn_worker.sh    在 hc 里启动一个实施者 worker
+skill/pfstack/                    Claude Code skill（init / check / update）+ CLI 脚本
 ```
 
 ## 用法
 
+**推荐：Claude Code skill。** 装一次，所有项目可用：
+
 ```sh
-cp -R pfstack/templates/. my-project/
-# 改 AGENTS.md / DESIGN.md 里的 <占位>，在 review_lint.py 里登记项目规则
+gh repo clone chux0519/pfstack ~/repos/pfstack
+ln -sfn ~/repos/pfstack/skill/pfstack ~/.claude/skills/pfstack
+```
+
+然后在新项目里对 Claude 说 `/pfstack`（或「用 pfstack 初始化这个项目」）。它会：列出要加的文件 → 一次问清项目名、设备、
+授权、禁用名字、测试命令 → 复制模板并填好占位 → 建 `CLAUDE.md`（`@AGENTS.md`）→ 跑 lint、记测试基线 → 在 `pfstack-init`
+分支提交，问你要不要推送。已有项目说 `/pfstack check` 看缺什么，`/pfstack update` 拉新模板（不覆盖你的改动）。
+
+**也可以直接用 CLI：**
+
+```sh
+python3 ~/repos/pfstack/skill/pfstack/scripts/pfstack.py init <dir> [--dry-run]
+python3 ~/repos/pfstack/skill/pfstack/scripts/pfstack.py check <dir>
+python3 ~/repos/pfstack/skill/pfstack/scripts/pfstack.py update <dir>
 ```
